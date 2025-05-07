@@ -129,6 +129,10 @@ Start by selecting a project or asking questions like:
 7. `list-gke-clusters`: List all GKE clusters in the current project
 8. `list-sql-instances`: List all Cloud SQL instances in the current project
 9. `get-logs`: Get Cloud Logging entries for the current project
+10. `check-bq-table-metadata`: Get metadata for a BigQuery table.
+11. `check-bq-table-schema`: Get the schema of a BigQuery table.
+12. `dry-run-bq-query`: Perform a dry run of a BigQuery query to validate and estimate costs. (Note: The `projectId` argument specifies the project for job execution/billing. For cross-project queries, use fully qualified table names like `\`project-id.dataset-id.table-id\`` in your SQL.)
+13. `run-bq-query`: Execute a BigQuery query and return results. (Note: The `projectId` argument specifies the project for job execution/billing. For cross-project queries, use fully qualified table names like `\`project-id.dataset-id.table-id\`` in your SQL.)
 
 ## Example Interactions
 
@@ -177,6 +181,7 @@ Common issues:
 1. Authentication errors: Ensure you've run `gcloud auth application-default login`
 2. Permission errors: Check IAM roles for your account
 3. API errors: Verify that required APIs are enabled in your project
+4. BigQuery Location Mismatches: Queries, especially on public or cross-project datasets, may fail if the job `location` (e.g., 'US', 'EU', 'us-central1') doesn't match the dataset's actual location. Ensure the `location` parameter in BigQuery tools is correctly set. Error messages from these tools now include a hint regarding this.
 
 ## Contributing
 

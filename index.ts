@@ -208,6 +208,98 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: [],
         },
+      },
+      {
+        name: "check-bq-table-metadata",
+        description: "Get metadata for a BigQuery table.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            datasetId: {
+              type: "string",
+              description: "The ID of the BigQuery dataset.",
+            },
+            tableId: {
+              type: "string",
+              description: "The ID of the BigQuery table.",
+            },
+            projectId: {
+              type: "string",
+              description: "GCP project ID to use (defaults to selected project).",
+            },
+          },
+          required: ["datasetId", "tableId"],
+        },
+      },
+      {
+        name: "check-bq-table-schema",
+        description: "Get the schema of a BigQuery table.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            datasetId: {
+              type: "string",
+              description: "The ID of the BigQuery dataset.",
+            },
+            tableId: {
+              type: "string",
+              description: "The ID of the BigQuery table.",
+            },
+            projectId: {
+              type: "string",
+              description: "GCP project ID to use (defaults to selected project).",
+            },
+          },
+          required: ["datasetId", "tableId"],
+        },
+      },
+      {
+        name: "dry-run-bq-query",
+        description: "Perform a dry run of a BigQuery query to validate and estimate costs.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "The SQL query to dry run.",
+            },
+            projectId: {
+              type: "string",
+              description: "GCP project ID to use (defaults to selected project).",
+            },
+            location: {
+              type: "string",
+              description: "Location for the query job (e.g., 'US', 'EU', defaults to selected region or 'us-central1').",
+            },
+          },
+          required: ["query"],
+        },
+      },
+      {
+        name: "run-bq-query",
+        description: "Execute a BigQuery query and return results.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "The SQL query to execute.",
+            },
+            projectId: {
+              type: "string",
+              description: "GCP project ID to use (defaults to selected project).",
+            },
+            location: {
+              type: "string",
+              description: "Location for the query job (e.g., 'US', 'EU', defaults to selected region or 'us-central1').",
+            },
+            maxResults: {
+              type: "number",
+              description: "Maximum number of rows to return (default: 1000).",
+            }
+          },
+          required: ["query"],
+        },
       }
     ],
   };
@@ -245,6 +337,31 @@ const ListGKEClustersSchema = z.object({
 const GetLogsSchema = z.object({
   filter: z.string().optional(),
   pageSize: z.number().optional(),
+});
+
+const CheckBQTableMetadataSchema = z.object({
+  datasetId: z.string(),
+  tableId: z.string(),
+  projectId: z.string().optional(),
+});
+
+const CheckBQTableSchemaSchema = z.object({
+  datasetId: z.string(),
+  tableId: z.string(),
+  projectId: z.string().optional(),
+});
+
+const DryRunBQQuerySchema = z.object({
+  query: z.string(),
+  projectId: z.string().optional(),
+  location: z.string().optional(),
+});
+
+const RunBQQuerySchema = z.object({
+  query: z.string(),
+  projectId: z.string().optional(),
+  location: z.string().optional(),
+  maxResults: z.number().optional(),
 });
 
 interface GKECluster {
@@ -605,7 +722,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         const [response] = await sqlClient.list(request);
 
         return createTextResponse(JSON.stringify({
-          instances: (response?.items || []).map(instance => ({
+          instances: (response?.items || []).map((instance: any) => ({
             name: instance.name || null,
             databaseVersion: instance.databaseVersion || null,
             state: instance.state || null,
@@ -645,6 +762,88 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
       } catch (error: any) {
         console.error('Error getting logs:', error);
         return createTextResponse(`Error getting logs: ${error.message}`);
+      }
+    } else if (name === "check-bq-table-metadata") {
+      const { datasetId, tableId, projectId } = CheckBQTableMetadataSchema.parse(args);
+      const targetProject = projectId || selectedProject;
+
+      if (!targetProject) {
+        return createTextResponse("No project selected. Please select a project first using the 'select-project' tool.");
+      }
+
+      try {
+        const bigquery = new BigQuery({ projectId: targetProject });
+        const [metadata] = await bigquery.dataset(datasetId).table(tableId).getMetadata();
+        return createTextResponse(JSON.stringify(metadata, null, 2));
+      } catch (error: any) {
+        console.error('Error getting BigQuery table metadata:', error);
+        return createTextResponse(`Error getting BigQuery table metadata: ${error.message}`);
+      }
+    } else if (name === "check-bq-table-schema") {
+      const { datasetId, tableId, projectId } = CheckBQTableSchemaSchema.parse(args);
+      const targetProject = projectId || selectedProject;
+
+      if (!targetProject) {
+        return createTextResponse("No project selected. Please select a project first using the 'select-project' tool.");
+      }
+
+      try {
+        const bigquery = new BigQuery({ projectId: targetProject });
+        const [metadata] = await bigquery.dataset(datasetId).table(tableId).getMetadata();
+        const schema = metadata.schema;
+        return createTextResponse(JSON.stringify(schema, null, 2));
+      } catch (error: any) {
+        console.error('Error getting BigQuery table schema:', error);
+        return createTextResponse(`Error getting BigQuery table schema: ${error.message}`);
+      }
+    } else if (name === "dry-run-bq-query") {
+      const { query, projectId, location } = DryRunBQQuerySchema.parse(args);
+      const targetProject = projectId || selectedProject;
+      const queryLocation = location || selectedRegion || "us-central1";
+
+      if (!targetProject) {
+        return createTextResponse("No project selected. Please select a project first using the 'select-project' tool.");
+      }
+
+      try {
+        const bigquery = new BigQuery({ projectId: targetProject });
+        const options = {
+          query: query,
+          location: queryLocation,
+          dryRun: true,
+        };
+        const [job] = await bigquery.createQueryJob(options);
+        const stats = job.metadata.statistics;
+        const result = {
+          totalBytesProcessed: stats.totalBytesProcessed,
+          totalSlotMs: stats.totalSlotMs || null,
+        };
+        return createTextResponse(JSON.stringify(result, null, 2));
+      } catch (error: any) {
+        console.error('Error dry running BigQuery query:', error);
+        return createTextResponse(`Error dry running BigQuery query: ${error.message} Hint: If this error relates to dataset access, ensure the 'location' parameter for this tool (e.g., 'US', 'EU') matches the dataset's actual location. The query job was attempted in location: ${queryLocation}.`);
+      }
+    } else if (name === "run-bq-query") {
+      const { query, projectId, location, maxResults = 1000 } = RunBQQuerySchema.parse(args);
+      const targetProject = projectId || selectedProject;
+      const queryLocation = location || selectedRegion || "us-central1";
+
+      if (!targetProject) {
+        return createTextResponse("No project selected. Please select a project first using the 'select-project' tool.");
+      }
+
+      try {
+        const bigquery = new BigQuery({ projectId: targetProject });
+        const options = {
+          query: query,
+          location: queryLocation,
+          maxResults: maxResults,
+        };
+        const [rows] = await bigquery.query(options);
+        return createTextResponse(JSON.stringify(rows, null, 2));
+      } catch (error: any) {
+        console.error('Error running BigQuery query:', error);
+        return createTextResponse(`Error running BigQuery query: ${error.message} Hint: If this error relates to dataset access, ensure the 'location' parameter for this tool (e.g., 'US', 'EU') matches the dataset's actual location. The query job was attempted in location: ${queryLocation}.`);
       }
     } else {
       throw new Error(`Unknown tool: ${name}`);
