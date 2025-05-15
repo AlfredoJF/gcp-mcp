@@ -133,6 +133,7 @@ Start by selecting a project or asking questions like:
 11. `check-bq-table-schema`: Get the schema of a BigQuery table.
 12. `dry-run-bq-query`: Perform a dry run of a BigQuery query to validate and estimate costs. (Note: The `projectId` argument specifies the project for job execution/billing. For cross-project queries, use fully qualified table names like `\`project-id.dataset-id.table-id\`` in your SQL.)
 13. `run-bq-query`: Execute a BigQuery query and return results. (Note: The `projectId` argument specifies the project for job execution/billing. For cross-project queries, use fully qualified table names like `\`project-id.dataset-id.table-id\`` in your SQL.)
+14. `list-bq-datasets`: List all BigQuery datasets in a project.
 
 ## Example Interactions
 

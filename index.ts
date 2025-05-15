@@ -300,6 +300,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["query"],
         },
+      },
+      {
+        name: "list-bq-datasets",
+        description: "List all BigQuery datasets in a project.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            projectId: {
+              type: "string",
+              description: "GCP project ID to list datasets from (defaults to selected project).",
+            },
+          },
+          required: [],
+        },
       }
     ],
   };
@@ -362,6 +376,10 @@ const RunBQQuerySchema = z.object({
   projectId: z.string().optional(),
   location: z.string().optional(),
   maxResults: z.number().optional(),
+});
+
+const ListBQDatasetsSchema = z.object({
+  projectId: z.string().optional(),
 });
 
 interface GKECluster {
@@ -437,19 +455,16 @@ Available clients and their usage:
 4. run: ServicesClient
    Example: const [services] = await run.listServices({parent: \`projects/\${selectedProject}/locations/-\`});
 
-5. bigquery: BigQuery
-   Example: const [datasets] = await bigquery.getDatasets();
-
-6. resourceManager: ProjectsClient
+5. resourceManager: ProjectsClient
    Example: const [project] = await resourceManager.getProject({name: \`projects/\${selectedProject}\`});
 
-7. container: ClusterManagerClient
+6. container: ClusterManagerClient
    Example: const [clusters] = await container.listClusters({parent: \`projects/\${selectedProject}/locations/-\`});
 
-8. logging: Logging
+7. logging: Logging
    Example: const [entries] = await logging.getEntries({pageSize: 10});
 
-9. sql: SqlInstancesServiceClient
+8. sql: SqlInstancesServiceClient
    Example: const [instances] = await sql.list({project: selectedProject});
 `;
 
@@ -844,6 +859,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
       } catch (error: any) {
         console.error('Error running BigQuery query:', error);
         return createTextResponse(`Error running BigQuery query: ${error.message} Hint: If this error relates to dataset access, ensure the 'location' parameter for this tool (e.g., 'US', 'EU') matches the dataset's actual location. The query job was attempted in location: ${queryLocation}.`);
+      }
+    } else if (name === "list-bq-datasets") {
+      const { projectId } = ListBQDatasetsSchema.parse(args);
+      const targetProject = projectId || selectedProject;
+
+      if (!targetProject) {
+        return createTextResponse("No project selected. Please select a project first using the 'select-project' tool.");
+      }
+
+      try {
+        const bigquery = new BigQuery({ projectId: targetProject });
+        const [datasets] = await bigquery.getDatasets();
+        const datasetIds = datasets.map(dataset => dataset.id);
+        return createTextResponse(JSON.stringify({ datasets: datasetIds }, null, 2));
+      } catch (error: any) {
+        console.error('Error listing BigQuery datasets:', error);
+        return createTextResponse(`Error listing BigQuery datasets: ${error.message}`);
       }
     } else {
       throw new Error(`Unknown tool: ${name}`);
